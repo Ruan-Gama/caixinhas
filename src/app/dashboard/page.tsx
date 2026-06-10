@@ -295,6 +295,7 @@ export default function DashboardPage() {
                 body: JSON.stringify(body),
             })
         }
+        /*
         if (!editingBucket && bucketIcon === "🐱" && bucketName.toLowerCase().trim() === "stella") {
             await fetchData()
             setShowBucket(false)
@@ -302,6 +303,7 @@ export default function DashboardPage() {
             router.push("/love")
             return
         }
+        */
         await fetchData()
         setShowBucket(false)
         setLoading(false)
