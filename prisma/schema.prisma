@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String           @id @default(cuid())
+  email           String           @unique
+  password        String
+  name            String?
+  createdAt       DateTime         @default(now())
+  buckets         Bucket[]
+  wealthSnapshots WealthSnapshot[]
+}
+
+model Bucket {
+  id           String        @id @default(cuid())
+  name         String
+  goalAmount   Decimal?      @db.Decimal(15, 2)
+  goalDate     DateTime?
+  color        String        @default("#6366f1")
+  icon         String        @default("💰")
+  description  String?
+  createdAt    DateTime      @default(now())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  bucketId    String
+  type        TransactionType
+  amount      Decimal         @db.Decimal(15, 2)
+  description String?
+  createdAt   DateTime        @default(now())
+  bucket      Bucket          @relation(fields: [bucketId], references: [id], onDelete: Cascade)
+}
+
+model WealthSnapshot {
+  id           String   @id @default(cuid())
+  totalBalance Decimal  @db.Decimal(15, 2)
+  snapshotDate DateTime
+  createdAt    DateTime @default(now())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum TransactionType {
+  APORTE
+  RETIRADA
+  TRANSFERENCIA
+  RENDIMENTO
+}
