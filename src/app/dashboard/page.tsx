@@ -3,6 +3,7 @@
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
+import Link from "next/link"
 
 type Theme = "dark" | "pink" | "light" | "midnight"
 
@@ -178,6 +179,7 @@ export default function DashboardPage() {
 
     // Snapshot form
     const [snapshotValue, setSnapshotValue] = useState("")
+    const [snapshotType, setSnapshotType] = useState<"DEPOSITAR" | "RETIRAR">("DEPOSITAR")
 
     // Bucket form
     const [bucketName, setBucketName] = useState("")
@@ -259,15 +261,22 @@ export default function DashboardPage() {
     async function handleSnapshot(e: React.FormEvent) {
         e.preventDefault()
         const parsed = parseFloat(snapshotValue.replace(",", "."))
-        if (isNaN(parsed) || parsed <= 0) { alert("Digite um valor válido maior que zero."); return }
+        if (isNaN(parsed) || parsed <= 0) {
+            alert("Digite um valor válido maior que zero.")
+            return
+        }
         setLoading(true)
         const res = await fetch("/api/snapshots", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ totalBalance: parsed }),
+            body: JSON.stringify({ type: snapshotType, amount: parsed }),
         })
         const json = await res.json()
-        if (!res.ok) { alert(json.error); setLoading(false); return }
+        if (!res.ok) {
+            alert(json.error)
+            setLoading(false)
+            return
+        }
         await fetchData()
         setSnapshotValue("")
         setShowSnapshot(false)
@@ -352,24 +361,27 @@ export default function DashboardPage() {
     return (
         <div className={`min-h-screen ${t.bg} ${t.text}`}>
             {/* Header */}
-            <header className={`border-b ${t.headerBorder} px-4 py-4 flex items-center justify-between`}>
-                <h1 className="text-xl font-bold">🪙 Caixinhas</h1>
-                <div className="flex items-center gap-2">
-                    <span className={`${t.textMuted} text-xs hidden sm:block`}>{session?.user?.name || session?.user?.email}</span>
-                    <button
-                        onClick={cycleTheme}
-                        className={`text-xs border ${t.border} rounded-lg px-3 py-1.5 transition-colors ${t.textMuted}`}
-                        title="Trocar tema"
-                    >
-                        {THEMES[theme].emoji} {THEMES[theme].label}
-                    </button>
-                    <button
-                        onClick={() => signOut()}
-                        className={`text-xs ${t.textMuted} hover:${t.text} transition-colors border ${t.border} rounded-lg px-3 py-1.5`}
-                    >
-                        Sair
-                    </button>
+            <header className={`border-b ${t.headerBorder} px-4 py-4`}>
+                <div className="flex items-center justify-between mb-3">
+                    <h1 className="text-xl font-bold">🪙 Caixinhas</h1>
+                    <div className="flex items-center gap-2">
+                        <span className={`${t.textMuted} text-xs hidden sm:block`}>{session?.user?.name || session?.user?.email}</span>
+                        <button onClick={cycleTheme} className={`text-xs border ${t.border} rounded-lg px-3 py-1.5 transition-colors ${t.textMuted}`}>
+                            {THEMES[theme].emoji} {THEMES[theme].label}
+                        </button>
+                        <button onClick={() => signOut()} className={`text-xs ${t.textMuted} hover:${t.text} transition-colors border ${t.border} rounded-lg px-3 py-1.5`}>
+                            Sair
+                        </button>
+                    </div>
                 </div>
+                <nav className="flex gap-1">
+                    <Link href="/dashboard" className={`text-sm px-4 py-1.5 rounded-lg transition-colors bg-gray-800 text-white`}>
+                        💰 Patrimônio
+                    </Link>
+                    <Link href="/financas" className={`text-sm px-4 py-1.5 rounded-lg transition-colors text-gray-400 hover:text-white`}>
+                        📅 Finanças do Mês
+                    </Link>
+                </nav>
             </header>
 
             <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
@@ -506,21 +518,39 @@ export default function DashboardPage() {
 
             {/* Modal: Snapshot */}
             {showSnapshot && (
-                <div className={modalBase}>
-                    <div className={modalBox}>
+                <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+                    <div className={`${t.surface} rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-md border ${t.border}`}>
                         <h3 className="text-lg font-semibold mb-1">Atualizar patrimônio</h3>
-                        <p className={`text-xs ${t.textMuted} mb-4`}>Informe o saldo total atual da sua conta no banco.</p>
+                        <p className={`text-xs ${t.textMuted} mb-4`}>Patrimônio atual: <span className="font-semibold">{fmt(data.patrimonioAtual)}</span></p>
                         <form onSubmit={handleSnapshot} className="space-y-4">
                             <div>
-                                <label className={`block text-sm ${t.textMuted} mb-1`}>Saldo atual (R$)</label>
-                                <input type="text" inputMode="decimal" value={snapshotValue}
+                                <label className={`block text-sm ${t.textMuted} mb-2`}>Tipo</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {(["DEPOSITAR", "RETIRAR"] as const).map((tp) => (
+                                        <button key={tp} type="button" onClick={() => setSnapshotType(tp)}
+                                            className={`py-2.5 rounded-lg text-sm font-medium transition-colors ${snapshotType === tp ? `${t.btnPrimary} text-white` : `${t.btnSecondary} ${t.btnSecondaryHover}`}`}>
+                                            {tp === "DEPOSITAR" ? "➕ Depositar" : "➖ Retirar"}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <label className={`block text-sm ${t.textMuted} mb-1`}>Valor (R$)</label>
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={snapshotValue}
                                     onChange={(e) => setSnapshotValue(e.target.value)}
-                                    className={inputClass} placeholder="Ex: 20200,00" autoFocus required />
+                                    className={inputClass}
+                                    placeholder="Ex: 3000,00"
+                                    autoFocus
+                                    required
+                                />
                             </div>
                             <div className="flex gap-3">
                                 <button type="button" onClick={() => setShowSnapshot(false)} className={`flex-1 ${t.btnSecondary} ${t.btnSecondaryHover} py-3 rounded-lg text-sm transition-colors`}>Cancelar</button>
                                 <button type="submit" disabled={loading} className={`flex-1 ${t.btnPrimary} ${t.btnPrimaryHover} py-3 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 text-white`}>
-                                    {loading ? "Salvando..." : "Salvar"}
+                                    {loading ? "Salvando..." : snapshotType === "DEPOSITAR" ? "Depositar" : "Retirar"}
                                 </button>
                             </div>
                         </form>

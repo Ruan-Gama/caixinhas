@@ -19,19 +19,29 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-  const { totalBalance } = await req.json()
+  const { type, amount } = await req.json()
 
-  const parsed = parseFloat(totalBalance)
-  if (isNaN(parsed) || parsed <= 0)
+  if (!amount || isNaN(amount) || amount <= 0)
     return NextResponse.json({ error: "Valor inválido" }, { status: 400 })
+
+  const previous = await prisma.wealthSnapshot.findFirst({
+    where: { userId: session.user.id },
+    orderBy: { snapshotDate: "desc" },
+  })
+
+  const previousBalance = previous ? Number(previous.totalBalance) : 0
+
+  const newBalance = type === "DEPOSITAR"
+    ? previousBalance + amount
+    : Math.max(previousBalance - amount, 0)
 
   const snapshot = await prisma.wealthSnapshot.create({
     data: {
-      totalBalance: parsed,
+      totalBalance: newBalance,
       snapshotDate: new Date(),
       userId: session.user.id,
     },
   })
 
-  return NextResponse.json(snapshot)
+  return NextResponse.json({ snapshot, newBalance })
 }

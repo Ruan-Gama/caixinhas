@@ -15,6 +15,8 @@ model User {
   createdAt       DateTime         @default(now())
   buckets         Bucket[]
   wealthSnapshots WealthSnapshot[]
+  bills           Bill[]
+  monthlyIncomes  MonthlyIncome[]
 }
 
 model Bucket {
@@ -55,4 +57,36 @@ enum TransactionType {
   RETIRADA
   TRANSFERENCIA
   RENDIMENTO
+}
+
+model Bill {
+  id            String         @id @default(cuid())
+  name          String
+  amount        Decimal        @db.Decimal(15, 2)
+  icon          String         @default("📄")
+  color         String         @default("#6366f1")
+  description   String?
+  resetDay      Int
+  endsAt        DateTime?
+  createdAt     DateTime       @default(now())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments      BillPayment[]
+}
+
+model BillPayment {
+  id          String   @id @default(cuid())
+  billId      String
+  amount      Decimal  @db.Decimal(15, 2)
+  createdAt   DateTime @default(now())
+  bill        Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+}
+
+model MonthlyIncome {
+  id          String   @id @default(cuid())
+  amount      Decimal  @db.Decimal(15, 2)
+  type        String
+  createdAt   DateTime @default(now())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
