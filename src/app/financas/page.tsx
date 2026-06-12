@@ -2,7 +2,7 @@
 
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 
 type Theme = "dark" | "pink" | "light" | "midnight"
@@ -29,6 +29,12 @@ type Income = {
     createdAt: string
 }
 
+type Toast = {
+    id: number
+    message: string
+    type: "error" | "success" | "warning"
+}
+
 function fmt(value: number) {
     return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
@@ -44,6 +50,7 @@ const THEMES: Record<Theme, {
     input: string; inputBorder: string; inputFocus: string
     accentText: string; progressBg: string; headerBorder: string
     navActive: string; navInactive: string
+    checkboxBg: string; checkboxBorder: string; checkboxChecked: string; checkboxDot: string
 }> = {
     dark: {
         label: "Escuro", emoji: "🌙",
@@ -54,6 +61,7 @@ const THEMES: Record<Theme, {
         input: "bg-gray-800", inputBorder: "border-gray-700", inputFocus: "focus:border-indigo-500",
         accentText: "text-indigo-400", progressBg: "bg-indigo-500", headerBorder: "border-gray-800",
         navActive: "bg-gray-800 text-white", navInactive: "text-gray-400 hover:text-white",
+        checkboxBg: "bg-gray-800", checkboxBorder: "border-gray-600", checkboxChecked: "bg-indigo-600 border-indigo-600", checkboxDot: "text-white",
     },
     pink: {
         label: "Rosa", emoji: "🌸",
@@ -64,6 +72,7 @@ const THEMES: Record<Theme, {
         input: "bg-pink-900/80", inputBorder: "border-pink-700", inputFocus: "focus:border-pink-400",
         accentText: "text-pink-300", progressBg: "bg-pink-400", headerBorder: "border-pink-800/60",
         navActive: "bg-pink-800 text-white", navInactive: "text-pink-300 hover:text-white",
+        checkboxBg: "bg-pink-900", checkboxBorder: "border-pink-600", checkboxChecked: "bg-pink-500 border-pink-500", checkboxDot: "text-white",
     },
     light: {
         label: "Claro", emoji: "☀️",
@@ -74,6 +83,7 @@ const THEMES: Record<Theme, {
         input: "bg-slate-50", inputBorder: "border-slate-300", inputFocus: "focus:border-violet-500",
         accentText: "text-violet-600", progressBg: "bg-violet-500", headerBorder: "border-slate-200",
         navActive: "bg-slate-200 text-slate-900", navInactive: "text-slate-500 hover:text-slate-900",
+        checkboxBg: "bg-slate-100", checkboxBorder: "border-slate-300", checkboxChecked: "bg-violet-600 border-violet-600", checkboxDot: "text-white",
     },
     midnight: {
         label: "Meia-noite", emoji: "🌌",
@@ -84,10 +94,65 @@ const THEMES: Record<Theme, {
         input: "bg-slate-800", inputBorder: "border-slate-600", inputFocus: "focus:border-cyan-500",
         accentText: "text-cyan-400", progressBg: "bg-cyan-500", headerBorder: "border-slate-700/50",
         navActive: "bg-slate-800 text-slate-100", navInactive: "text-slate-400 hover:text-slate-100",
+        checkboxBg: "bg-slate-800", checkboxBorder: "border-slate-500", checkboxChecked: "bg-cyan-600 border-cyan-600", checkboxDot: "text-white",
     },
 }
 
 const THEME_ORDER: Theme[] = ["dark", "pink", "light", "midnight"]
+
+// ── Toast icons ──────────────────────────────────────────────────────────────
+const TOAST_STYLES = {
+    error:   { bar: "bg-rose-500",   icon: "✕", iconBg: "bg-rose-500/20 text-rose-400",   label: "Erro" },
+    success: { bar: "bg-emerald-500", icon: "✓", iconBg: "bg-emerald-500/20 text-emerald-400", label: "Sucesso" },
+    warning: { bar: "bg-amber-500",  icon: "!", iconBg: "bg-amber-500/20 text-amber-400",  label: "Atenção" },
+}
+
+// ── CustomCheckbox ────────────────────────────────────────────────────────────
+function CustomCheckbox({
+    checked,
+    onChange,
+    label,
+    subLabel,
+    theme,
+}: {
+    checked: boolean
+    onChange: (v: boolean) => void
+    label: string
+    subLabel?: string
+    theme: (typeof THEMES)[Theme]
+}) {
+    return (
+        <button
+            type="button"
+            onClick={() => onChange(!checked)}
+            className={`w-full flex items-start gap-3 rounded-xl border p-3 transition-all text-left
+                ${checked
+                    ? `${theme.btnPrimary.replace("bg-", "border-").replace("600", "500").replace("400", "300")} bg-opacity-10`
+                    : `${theme.inputBorder} ${theme.input}`}
+                border`}
+        >
+            {/* Box */}
+            <span
+                className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all
+                    ${checked
+                        ? theme.checkboxChecked
+                        : `${theme.checkboxBg} ${theme.checkboxBorder}`}`}
+            >
+                {checked && (
+                    <svg width="10" height="8" viewBox="0 0 10 8" fill="none" className="text-white">
+                        <path d="M1 3.5L3.8 6.5L9 1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                )}
+            </span>
+
+            {/* Labels */}
+            <span className="flex flex-col">
+                <span className={`text-sm font-medium ${theme.text}`}>{label}</span>
+                {subLabel && <span className={`text-xs mt-0.5 ${theme.textMuted}`}>{subLabel}</span>}
+            </span>
+        </button>
+    )
+}
 
 export default function FinancasPage() {
     const { data: session, status } = useSession()
@@ -97,6 +162,16 @@ export default function FinancasPage() {
 
     const [bills, setBills] = useState<Bill[]>([])
     const [incomes, setIncomes] = useState<Income[]>([])
+
+    // Toasts
+    const [toasts, setToasts] = useState<Toast[]>([])
+    let toastCounter = 0
+
+    const showToast = useCallback((message: string, type: Toast["type"] = "error") => {
+        const id = ++toastCounter
+        setToasts((prev) => [...prev, { id, message, type }])
+        setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000)
+    }, [])
 
     // Modals
     const [showIncome, setShowIncome] = useState(false)
@@ -123,7 +198,6 @@ export default function FinancasPage() {
     const [discountFromSalary, setDiscountFromSalary] = useState(true)
 
     const t = THEMES[theme]
-
 
     useEffect(() => {
         const saved = localStorage.getItem("theme") as Theme | null
@@ -159,7 +233,6 @@ export default function FinancasPage() {
         setIncomes(json)
     }
 
-    // Salário atual = soma de todos os movimentos
     const salarioAtual = incomes.reduce((acc, i) => {
         return i.type === "DEPOSITAR" ? acc + Number(i.amount) : acc - Number(i.amount)
     }, 0)
@@ -203,7 +276,10 @@ export default function FinancasPage() {
     async function handleIncome(e: React.FormEvent) {
         e.preventDefault()
         const parsed = parseFloat(incomeValue.replace(",", "."))
-        if (isNaN(parsed) || parsed <= 0) { alert("Digite um valor válido maior que zero."); return }
+        if (isNaN(parsed) || parsed <= 0) {
+            showToast("Digite um valor válido maior que zero.", "warning")
+            return
+        }
         setLoading(true)
         const res = await fetch("/api/income", {
             method: "POST",
@@ -211,19 +287,35 @@ export default function FinancasPage() {
             body: JSON.stringify({ amount: parsed, type: incomeType }),
         })
         const json = await res.json()
-        if (!res.ok) { alert(json.error); setLoading(false); return }
+        if (!res.ok) {
+            showToast(json.error, "error")
+            setLoading(false)
+            return
+        }
         await fetchIncomes()
         setIncomeValue("")
         setShowIncome(false)
+        showToast(
+            incomeType === "DEPOSITAR"
+                ? `${fmt(parsed)} depositado com sucesso.`
+                : `${fmt(parsed)} retirado com sucesso.`,
+            "success"
+        )
         setLoading(false)
     }
 
     async function handleBill(e: React.FormEvent) {
         e.preventDefault()
         const parsed = parseFloat(billAmount.replace(",", "."))
-        if (isNaN(parsed) || parsed <= 0) { alert("Digite um valor válido."); return }
+        if (isNaN(parsed) || parsed <= 0) {
+            showToast("Digite um valor válido.", "warning")
+            return
+        }
         const day = parseInt(billResetDay)
-        if (isNaN(day) || day < 1 || day > 28) { alert("Dia deve ser entre 1 e 28."); return }
+        if (isNaN(day) || day < 1 || day > 28) {
+            showToast("O dia de renovação deve ser entre 1 e 28.", "warning")
+            return
+        }
         setLoading(true)
 
         const body = {
@@ -251,6 +343,7 @@ export default function FinancasPage() {
         await fetchBills()
         await fetchIncomes()
         setShowBill(false)
+        showToast(editingBill ? "Conta atualizada." : "Conta criada.", "success")
         setLoading(false)
     }
 
@@ -261,61 +354,52 @@ export default function FinancasPage() {
         await fetch(`/api/bills/${id}`, { method: "DELETE" })
         await fetchBills()
         await fetchIncomes()
+        showToast("Conta excluída.", "success")
         setLoading(false)
     }
 
     async function handlePay(e: React.FormEvent) {
         e.preventDefault()
-
         if (!payingBill) return
 
         const parsed = parseFloat(payAmount.replace(",", "."))
-
         if (isNaN(parsed) || parsed <= 0) {
-            alert("Digite um valor válido.")
+            showToast("Digite um valor válido.", "warning")
             return
         }
-
         if (parsed > payingBill.remaining) {
-            alert(`O valor não pode ser maior que o restante da conta (${fmt(payingBill.remaining)}).`)
+            showToast(`O valor não pode ser maior que o restante da conta (${fmt(payingBill.remaining)}).`, "warning")
             return
         }
 
         setLoading(true)
 
         if (discountFromSalary && parsed > salarioAtual) {
-            alert(`Saldo insuficiente. Disponível: ${fmt(salarioAtual)}`)
+            showToast(`Saldo insuficiente. Disponível: ${fmt(salarioAtual)}`, "error")
             setLoading(false)
             return
         }
 
         const res = await fetch(`/api/bills/${payingBill.id}`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                amount: parsed,
-                discountFromSalary,
-            }),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ amount: parsed, discountFromSalary }),
         })
 
         const json = await res.json()
-
         if (!res.ok) {
-            alert(json.error)
+            showToast(json.error, "error")
             setLoading(false)
             return
         }
 
         await fetchBills()
         await fetchIncomes()
-
         setPayAmount("")
         setDiscountFromSalary(true)
         setShowPay(false)
         setPayingBill(null)
-
+        showToast(`Pagamento de ${fmt(parsed)} registrado.`, "success")
         setLoading(false)
     }
 
@@ -333,6 +417,42 @@ export default function FinancasPage() {
 
     return (
         <div className={`min-h-screen ${t.bg} ${t.text}`}>
+
+            {/* ── Toast stack ──────────────────────────────────────────── */}
+            <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none" style={{ maxWidth: "360px" }}>
+                {toasts.map((toast) => {
+                    const s = TOAST_STYLES[toast.type]
+                    return (
+                        <div
+                            key={toast.id}
+                            className={`pointer-events-auto flex items-start gap-3 rounded-xl shadow-xl border ${t.border} ${t.surface} overflow-hidden`}
+                            style={{ animation: "slideInRight 0.2s ease" }}
+                        >
+                            {/* colored side bar */}
+                            <div className={`w-1 self-stretch flex-shrink-0 ${s.bar}`} />
+
+                            {/* icon */}
+                            <div className={`mt-3 flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${s.iconBg}`}>
+                                {s.icon}
+                            </div>
+
+                            {/* text */}
+                            <div className="py-3 pr-4 flex flex-col">
+                                <span className={`text-xs font-semibold ${t.textMuted} uppercase tracking-wide`}>{s.label}</span>
+                                <span className={`text-sm ${t.text} mt-0.5`}>{toast.message}</span>
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
+
+            <style>{`
+                @keyframes slideInRight {
+                    from { opacity: 0; transform: translateX(16px); }
+                    to   { opacity: 1; transform: translateX(0); }
+                }
+            `}</style>
+
             {/* Header */}
             <header className={`border-b ${t.headerBorder} px-4 py-4`}>
                 <div className="flex items-center justify-between mb-3">
@@ -353,7 +473,6 @@ export default function FinancasPage() {
                         </button>
                     </div>
                 </div>
-                {/* Nav */}
                 <nav className="flex gap-1">
                     <Link href="/dashboard" className={`text-sm px-4 py-1.5 rounded-lg transition-colors ${t.navInactive}`}>
                         💰 Patrimônio
@@ -374,7 +493,7 @@ export default function FinancasPage() {
                     </div>
                     <div className={`${t.surface} rounded-2xl p-4 border ${t.border}`}>
                         <p className={`${t.textMuted} text-xs mb-1`}>Total em contas</p>
-                        <p className={`text-xl font-bold text-rose-400`}>{fmt(totalContas)}</p>
+                        <p className="text-xl font-bold text-rose-400">{fmt(totalContas)}</p>
                     </div>
                     <div className={`${t.surface} rounded-2xl p-4 border ${t.border}`}>
                         <p className={`${t.textMuted} text-xs mb-1`}>Sobra no mês</p>
@@ -438,7 +557,6 @@ export default function FinancasPage() {
 
                                     <p className="text-xl font-bold mb-1">{fmt(bill.amount)}</p>
 
-                                    {/* Barra de progresso */}
                                     <div className="mb-3">
                                         <div className="flex justify-between text-xs mb-1">
                                             <span className={t.textFaint}>Pago: {fmt(bill.paid)}</span>
@@ -469,24 +587,16 @@ export default function FinancasPage() {
             </main>
 
             {/* Modal: Salário */}
-            {/* Modal: Salário */}
             {showIncome && (
                 <div className={modalBase}>
                     <div className={modalBox}>
-                        <h3 className="text-lg font-semibold mb-1">
-                            Atualizar salário
-                        </h3>
-
+                        <h3 className="text-lg font-semibold mb-1">Atualizar salário</h3>
                         <p className={`text-xs ${t.textMuted} mb-4`}>
                             Saldo atual: <span className="font-semibold">{fmt(salarioAtual)}</span>
                         </p>
-
                         <form onSubmit={handleIncome} className="space-y-4">
                             <div>
-                                <label className={`block text-sm ${t.textMuted} mb-2`}>
-                                    Tipo
-                                </label>
-
+                                <label className={`block text-sm ${t.textMuted} mb-2`}>Tipo</label>
                                 <div className="grid grid-cols-2 gap-2">
                                     {(["DEPOSITAR", "RETIRAR"] as const).map((tp) => (
                                         <button
@@ -494,23 +604,17 @@ export default function FinancasPage() {
                                             type="button"
                                             onClick={() => setIncomeType(tp)}
                                             className={`py-2.5 rounded-lg text-sm font-medium transition-colors ${incomeType === tp
-                                                    ? `${t.btnPrimary} text-white`
-                                                    : `${t.btnSecondary} ${t.btnSecondaryHover}`
-                                                }`}
+                                                ? `${t.btnPrimary} text-white`
+                                                : `${t.btnSecondary} ${t.btnSecondaryHover}`
+                                            }`}
                                         >
-                                            {tp === "DEPOSITAR"
-                                                ? "➕ Depositar"
-                                                : "➖ Retirar"}
+                                            {tp === "DEPOSITAR" ? "➕ Depositar" : "➖ Retirar"}
                                         </button>
                                     ))}
                                 </div>
                             </div>
-
                             <div>
-                                <label className={`block text-sm ${t.textMuted} mb-1`}>
-                                    Valor (R$)
-                                </label>
-
+                                <label className={`block text-sm ${t.textMuted} mb-1`}>Valor (R$)</label>
                                 <input
                                     type="text"
                                     inputMode="decimal"
@@ -522,26 +626,14 @@ export default function FinancasPage() {
                                     required
                                 />
                             </div>
-
                             <div className="flex gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowIncome(false)}
-                                    className={`flex-1 ${t.btnSecondary} ${t.btnSecondaryHover} py-3 rounded-lg text-sm transition-colors`}
-                                >
+                                <button type="button" onClick={() => setShowIncome(false)}
+                                    className={`flex-1 ${t.btnSecondary} ${t.btnSecondaryHover} py-3 rounded-lg text-sm transition-colors`}>
                                     Cancelar
                                 </button>
-
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className={`flex-1 ${t.btnPrimary} ${t.btnPrimaryHover} py-3 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 text-white`}
-                                >
-                                    {loading
-                                        ? "Salvando..."
-                                        : incomeType === "DEPOSITAR"
-                                            ? "Depositar"
-                                            : "Retirar"}
+                                <button type="submit" disabled={loading}
+                                    className={`flex-1 ${t.btnPrimary} ${t.btnPrimaryHover} py-3 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 text-white`}>
+                                    {loading ? "Salvando..." : incomeType === "DEPOSITAR" ? "Depositar" : "Retirar"}
                                 </button>
                             </div>
                         </form>
@@ -602,8 +694,12 @@ export default function FinancasPage() {
                                 <p className={`text-xs ${t.textFaint} mt-1`}>Deixe vazio para conta sem prazo de encerramento</p>
                             </div>
                             <div className="flex gap-3">
-                                <button type="button" onClick={() => setShowBill(false)} className={`flex-1 ${t.btnSecondary} ${t.btnSecondaryHover} py-3 rounded-lg text-sm transition-colors`}>Cancelar</button>
-                                <button type="submit" disabled={loading} className={`flex-1 ${t.btnPrimary} ${t.btnPrimaryHover} py-3 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 text-white`}>
+                                <button type="button" onClick={() => setShowBill(false)}
+                                    className={`flex-1 ${t.btnSecondary} ${t.btnSecondaryHover} py-3 rounded-lg text-sm transition-colors`}>
+                                    Cancelar
+                                </button>
+                                <button type="submit" disabled={loading}
+                                    className={`flex-1 ${t.btnPrimary} ${t.btnPrimaryHover} py-3 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 text-white`}>
                                     {loading ? "Salvando..." : editingBill ? "Salvar" : "Criar"}
                                 </button>
                             </div>
@@ -616,21 +712,13 @@ export default function FinancasPage() {
             {showPay && payingBill && (
                 <div className={modalBase}>
                     <div className={modalBox}>
-                        <h3 className="text-lg font-semibold mb-1">
-                            Registrar pagamento
-                        </h3>
-
+                        <h3 className="text-lg font-semibold mb-1">Registrar pagamento</h3>
                         <p className={`text-xs ${t.textMuted} mb-4`}>
                             {payingBill.icon} {payingBill.name} · Falta {fmt(payingBill.remaining)}
                         </p>
-
                         <form onSubmit={handlePay} className="space-y-4">
-
                             <div>
-                                <label className={`block text-sm ${t.textMuted} mb-1`}>
-                                    Valor pago (R$)
-                                </label>
-
+                                <label className={`block text-sm ${t.textMuted} mb-1`}>Valor pago (R$)</label>
                                 <input
                                     type="text"
                                     inputMode="decimal"
@@ -643,37 +731,22 @@ export default function FinancasPage() {
                                 />
                             </div>
 
-                            <div>
-                                <label className="flex items-center gap-2 text-sm">
-                                    <input
-                                        type="checkbox"
-                                        checked={discountFromSalary}
-                                        onChange={(e) =>
-                                            setDiscountFromSalary(e.target.checked)
-                                        }
-                                    />
-                                    Descontar automaticamente do salário do mês
-                                </label>
-
-                                {discountFromSalary && (
-                                    <p className={`text-xs ${t.textMuted} mt-2`}>
-                                        Salário disponível: {fmt(salarioAtual)}
-                                    </p>
-                                )}
-                            </div>
+                            <CustomCheckbox
+                                checked={discountFromSalary}
+                                onChange={setDiscountFromSalary}
+                                label="Descontar do salário do mês"
+                                subLabel={discountFromSalary ? `Disponível: ${fmt(salarioAtual)}` : "O pagamento não será descontado do saldo"}
+                                theme={t}
+                            />
 
                             <div className="flex gap-3">
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        setShowPay(false)
-                                        setPayingBill(null)
-                                    }}
+                                    onClick={() => { setShowPay(false); setPayingBill(null) }}
                                     className={`flex-1 ${t.btnSecondary} ${t.btnSecondaryHover} py-3 rounded-lg text-sm transition-colors`}
                                 >
                                     Cancelar
                                 </button>
-
                                 <button
                                     type="submit"
                                     disabled={loading}

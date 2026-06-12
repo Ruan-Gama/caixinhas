@@ -193,6 +193,7 @@ export default function DashboardPage() {
     const [txType, setTxType] = useState("APORTE")
     const [txAmount, setTxAmount] = useState("")
     const [txDesc, setTxDesc] = useState("")
+    const [affectMoney, setAffectMoney] = useState(true)
 
     const t = THEMES[theme]
 
@@ -334,7 +335,13 @@ export default function DashboardPage() {
         const res = await fetch("/api/transactions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ bucketId: txBucket, type: txType, amount: parsed, description: txDesc }),
+            body: JSON.stringify({
+                bucketId: txBucket,
+                type: txType,
+                amount: parsed,
+                description: txDesc,
+                affectMoney
+            }),
         })
         const json = await res.json()
         if (!res.ok) { alert(json.error); setLoading(false); return }
@@ -342,6 +349,7 @@ export default function DashboardPage() {
         await fetchTransactions()
         setTxAmount("")
         setTxDesc("")
+        setAffectMoney(true)
         setShowTransaction(false)
         setLoading(false)
     }
@@ -434,7 +442,10 @@ export default function DashboardPage() {
                         ➕ Nova caixinha
                     </button>
                     {data.buckets.length > 0 && (
-                        <button onClick={() => setShowTransaction(true)} className={`${t.btnSecondary} ${t.btnSecondaryHover} px-4 py-2 rounded-lg text-sm font-medium transition-colors`}>
+                        <button onClick={() => {
+                            setAffectMoney(true)
+                            setShowTransaction(true)
+                        }} className={`${t.btnSecondary} ${t.btnSecondaryHover} px-4 py-2 rounded-lg text-sm font-medium transition-colors`}>
                             💸 Movimentação
                         </button>
                     )}
@@ -635,6 +646,37 @@ export default function DashboardPage() {
                             <div>
                                 <label className={`block text-sm ${t.textMuted} mb-1`}>Descrição (opcional)</label>
                                 <input type="text" value={txDesc} onChange={(e) => setTxDesc(e.target.value)} className={inputClass} placeholder="Ex: Salário de junho" />
+                            </div>
+                            <div
+                                className={`${t.input} border ${t.inputBorder} rounded-lg p-3 flex items-center justify-between`}
+                            >
+                                <div>
+                                    <p className="text-sm font-medium">
+                                        Afetar patrimônio
+                                    </p>
+
+                                    <p className={`text-xs ${t.textMuted}`}>
+                                        {affectMoney
+                                            ? "A movimentação será contabilizada no patrimônio"
+                                            : "Será apenas um registro da caixinha"}
+                                    </p>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setAffectMoney(!affectMoney)}
+                                    className={`
+            w-12 h-7 rounded-full transition-all relative
+            ${affectMoney ? t.btnPrimary : t.btnSecondary}
+        `}
+                                >
+                                    <span
+                                        className={`
+                absolute top-1 w-5 h-5 rounded-full bg-white transition-all
+                ${affectMoney ? "right-1" : "left-1"}
+            `}
+                                    />
+                                </button>
                             </div>
                             <div className="flex gap-3">
                                 <button type="button" onClick={() => setShowTransaction(false)} className={`flex-1 ${t.btnSecondary} ${t.btnSecondaryHover} py-3 rounded-lg text-sm transition-colors`}>Cancelar</button>

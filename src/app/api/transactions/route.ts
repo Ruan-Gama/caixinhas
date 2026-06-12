@@ -27,7 +27,7 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
 
-  const { bucketId, type, amount, description } = await req.json()
+  const { bucketId, type, amount, description, affectMoney = true } = await req.json()
 
   if (!bucketId || !type || !amount)
     return NextResponse.json({ error: "Dados incompletos" }, { status: 400 })
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Caixinha não encontrada" }, { status: 404 })
 
   // Valida se aporte não ultrapassa o patrimônio
-  if (type === "APORTE") {
+  if (affectMoney && (type === "APORTE" || type === "RETIRADA")) {
     const snapshot = await prisma.wealthSnapshot.findFirst({
       where: { userId: session.user.id },
       orderBy: { snapshotDate: "desc" },
